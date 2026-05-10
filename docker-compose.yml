@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: enterprise-agentops-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: enterprise_agents
+      POSTGRES_USER: agent_app
+      POSTGRES_PASSWORD: change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - enterprise_agentops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_app -d enterprise_agents"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  enterprise_agentops_pgdata:
