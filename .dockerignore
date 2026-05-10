@@ -1,0 +1,11 @@
+.git
+.gitignore
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+.DS_Store
+test_enterprise_agents.db

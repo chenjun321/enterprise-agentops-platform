@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from app.core.state import AgentState
 from app.security.policies import can_use_tool
-from app.tools.base import ToolRegistry
+from app.tools.base import ToolRegistry, ToolResult
 
 
 class PlanExecutor:
@@ -35,7 +35,18 @@ class PlanExecutor:
 
             payload = self._resolve_payload(step.input, state)
             tool = self.registry.get(step.tool)
-            result = tool.run(payload)
+            try:
+                result = tool.run(payload)
+            except Exception as exc:
+                result = ToolResult(ok=False, error="tool_execution_failed")
+                state.add_audit(
+                    "tool_failed",
+                    {
+                        "step_id": step.step_id,
+                        "tool": step.tool,
+                        "error": str(exc.__class__.__name__),
+                    },
+                )
             state.step_results[step.step_id] = result.model_dump()
             state.add_audit(
                 "tool_called",
@@ -44,6 +55,11 @@ class PlanExecutor:
             if result.ok:
                 state.evidence.append({"step_id": step.step_id, "tool": step.tool, "data": result.data})
             elif step.required:
+                state.final_response = {
+                    "type": "execution_error",
+                    "message": "系统暂时无法完成当前请求，请稍后重试或联系管理员。",
+                    "failed_step": step.step_id,
+                }
                 break
         return state
 
@@ -60,4 +76,3 @@ class PlanExecutor:
             if not resolved.get("order_no"):
                 resolved["order_no"] = first.get("order_no")
         return resolved
-

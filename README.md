@@ -47,6 +47,8 @@ python scripts/seed_demo.py
 uvicorn app.main:app --reload --port 8000
 ```
 
+开发环境如果不启用 bearer token，仍然可以沿用请求体中的 `employee_id` 和 `role`。
+
 ## 发布到 GitHub
 
 默认发布到：
@@ -92,6 +94,39 @@ DATABASE_POOL_SIZE=10
 DATABASE_MAX_OVERFLOW=20
 DATABASE_POOL_RECYCLE_SECONDS=1800
 DATABASE_ECHO=false
+INTERNAL_API_KEY=replace-with-long-random-secret
+AUTH_TOKENS_JSON={"support-token":{"employee_id":"support_001","role":"support"},"sales-token":{"employee_id":"sales_001","role":"sales"},"marketing-token":{"employee_id":"marketing_001","role":"marketing"},"admin-token":{"employee_id":"admin_001","role":"admin"}}
+ENABLE_API_DOCS=false
+EXPOSE_INTERNAL_TRACES=false
+LOG_LEVEL=INFO
+```
+
+生产环境启动时会强校验两件事：
+
+- 必须配置 `INTERNAL_API_KEY`
+- 必须配置至少一个 bearer token 映射 `AUTH_TOKENS_JSON`
+
+bearer token 用来把调用方身份绑定到服务端的 `employee_id` / `role`，避免客户端在请求体里自报身份。
+
+示例请求：
+
+```bash
+curl http://127.0.0.1:8000/api/chat \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: replace-with-long-random-secret' \
+  -H 'Authorization: Bearer support-token' \
+  -d '{
+    "message": "用户付款成功了，但是订单一直显示待支付，帮我查原因",
+    "context": {"order_no": "O20260505001"}
+  }'
+```
+
+查看当前认证身份：
+
+```bash
+curl http://127.0.0.1:8000/api/me \
+  -H 'X-API-Key: replace-with-long-random-secret' \
+  -H 'Authorization: Bearer support-token'
 ```
 
 迁移：
@@ -115,6 +150,32 @@ python scripts/seed_demo.py
 
 生产环境不开放 HTTP 初始化数据库入口，演示数据只能通过受控脚本写入。
 
+## 生产部署
+
+应用默认暴露：
+
+- `/health`：基础存活检查
+- `/health/db`：数据库就绪检查，需要 `X-API-Key`
+- `/api/me`：验证当前 bearer token 映射到的员工身份
+
+容器构建：
+
+```bash
+docker build -t enterprise-agentops-platform:latest .
+```
+
+容器运行：
+
+```bash
+docker run --rm -p 8000:8000 --env-file .env enterprise-agentops-platform:latest
+```
+
+应用镜像不会自动执行数据库迁移。上线前请先执行：
+
+```bash
+alembic upgrade head
+```
+
 ## 烟测
 
 ```bash
@@ -125,7 +186,7 @@ pytest -q
 端到端演示需要先启动 PostgreSQL、执行迁移并写入 demo 数据：
 
 ```bash
-python scripts/smoke.py
+SMOKE_BEARER_TOKEN=support-token python scripts/smoke.py
 ```
 
 ## 示例请求

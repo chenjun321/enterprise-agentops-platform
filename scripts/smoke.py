@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import os
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -9,14 +10,21 @@ from app.main import app
 
 
 def run_case(client, name, payload):
-    response = client.post("/api/chat", json=payload)
+    headers = {}
+    api_key = os.getenv("INTERNAL_API_KEY")
+    bearer_token = os.getenv("SMOKE_BEARER_TOKEN")
+    if api_key:
+        headers["X-API-Key"] = api_key
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    response = client.post("/api/chat", json=payload, headers=headers)
     response.raise_for_status()
     body = response.json()
     print(f"\n=== {name} ===")
     print("agent:", body["target_agent"])
     print("intent:", body["intent"])
     print("answer:", body["answer"])
-    print("plan:", body["plan"]["plan_id"])
+    print("plan:", body["plan"].get("plan_id", "hidden"))
 
 
 if __name__ == "__main__":

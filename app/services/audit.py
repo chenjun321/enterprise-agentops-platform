@@ -21,5 +21,4 @@ class AuditLogger:
                 detail=json.dumps(detail, ensure_ascii=False),
             )
         )
-        self.db.commit()
-
+        self.db.flush()

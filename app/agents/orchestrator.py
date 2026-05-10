@@ -52,6 +52,7 @@ class AgentOrchestrator:
             memory = self.memory_store.create_memory(**candidate)
             self.audit.record(state, "memory_written", {"memory_id": memory["id"], "memory_type": memory["memory_type"]})
 
+        self.db.commit()
         return state
 
     def _build_registry(self, db: Session) -> ToolRegistry:
@@ -66,4 +67,3 @@ class AgentOrchestrator:
         registry.register(CodeSearchTool())
         registry.register(SQLSelectTool(db))
         return registry
-

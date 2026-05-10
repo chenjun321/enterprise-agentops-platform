@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
-    employee_id: str = Field(..., examples=["employee_support_001"])
-    role: str = Field(..., examples=["support", "sales", "marketing", "engineer"])
+    employee_id: Optional[str] = Field(default=None, examples=["employee_support_001"])
+    role: Optional[str] = Field(default=None, examples=["support", "sales", "marketing", "engineer"])
     message: str
     session_id: Optional[str] = None
     context: Dict[str, Any] = Field(default_factory=dict)
@@ -22,7 +22,7 @@ class ChatResponse(BaseModel):
 
 
 class MemoryCreateRequest(BaseModel):
-    employee_id: str
+    employee_id: Optional[str] = None
     memory_type: str
     content: str
     source: str = "explicit_user_request"
@@ -31,3 +31,8 @@ class MemoryCreateRequest(BaseModel):
 class MemoryResponse(BaseModel):
     memories: List[Dict[str, Any]]
 
+
+class MeResponse(BaseModel):
+    employee_id: str
+    role: str
+    auth_mode: str
