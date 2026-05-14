@@ -197,7 +197,7 @@ class PaymentQueryTool(BaseTool):
 
 class LogSearchTool(BaseTool):
     name = "LogSearchTool"
-    description = "Search product logs by trace id, order number, service, or keyword."
+    description = "Search product logs by trace id, user id, order number, service, or keyword."
 
     def __init__(self, db: Session):
         self.db = db
@@ -206,6 +206,8 @@ class LogSearchTool(BaseTool):
         stmt = select(ProductLog)
         if payload.get("trace_id"):
             stmt = stmt.where(ProductLog.trace_id == payload["trace_id"])
+        if payload.get("user_id"):
+            stmt = stmt.where(ProductLog.user_id == payload["user_id"])
         if payload.get("order_no"):
             stmt = stmt.where(ProductLog.order_no == payload["order_no"])
         if payload.get("service"):

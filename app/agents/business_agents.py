@@ -72,19 +72,41 @@ class CustomerQAAgent:
         order = orders[0] if orders else {}
         payment = payments[0] if payments else {}
         log_messages = [item.get("message", "") for item in logs]
+        if state.intent == "payment_issue_diagnosis":
+            internal, user_reply = self._payment_summary(order, payment, log_messages, runbook, code)
+        elif state.intent == "login_issue_diagnosis":
+            internal, user_reply = self._login_summary(log_messages, runbook, code)
+        elif state.intent == "order_issue_diagnosis":
+            internal, user_reply = self._order_summary(order, log_messages, runbook, code)
+        else:
+            internal, user_reply = self._generic_summary(order, payment, log_messages, runbook, code)
+
+        return {
+            "user_reply": user_reply,
+            "internal_summary": redact_for_role(state.role, internal),
+            "confidence": internal["confidence"],
+        }
+
+    def _payment_summary(
+        self,
+        order: Dict[str, Any],
+        payment: Dict[str, Any],
+        log_messages: List[str],
+        runbook: List[Dict[str, Any]],
+        code: List[Dict[str, Any]],
+    ) -> tuple[Dict[str, Any], str]:
         callback_delay = (
             payment.get("status") == "success"
             and order.get("status") in {"pending", "unpaid"}
             and any("callback" in item.lower() or "timeout" in item.lower() for item in log_messages)
         )
         root_cause = "payment_callback_delay" if callback_delay else "insufficient_evidence"
-
         internal = {
             "root_cause": root_cause,
             "evidence": [
                 f"order.status={order.get('status', 'unknown')}",
                 f"payment.status={payment.get('status', 'unknown')}",
-                f"log_count={len(logs)}",
+                f"log_count={len(log_messages)}",
             ],
             "related_files": code,
             "runbook_sources": [item["source"] for item in runbook],
@@ -97,11 +119,84 @@ class CustomerQAAgent:
             if callback_delay
             else "目前还需要更多订单或流水信息才能准确判断原因。请补充订单号、支付时间或截图中的交易流水号。"
         )
-        return {
-            "user_reply": user_reply,
-            "internal_summary": redact_for_role(state.role, internal),
-            "confidence": internal["confidence"],
+        return internal, user_reply
+
+    def _login_summary(
+        self,
+        log_messages: List[str],
+        runbook: List[Dict[str, Any]],
+        code: List[Dict[str, Any]],
+    ) -> tuple[Dict[str, Any], str]:
+        auth_flow_issue = any(
+            keyword in item.lower()
+            for item in log_messages
+            for keyword in ["login", "auth", "token", "signature", "wallet"]
+        )
+        root_cause = "authentication_flow_issue" if auth_flow_issue else "insufficient_evidence"
+        internal = {
+            "root_cause": root_cause,
+            "evidence": [f"log_count={len(log_messages)}"],
+            "related_files": code,
+            "runbook_sources": [item["source"] for item in runbook],
+            "suggested_action": "check_auth_provider_and_signature_flow" if auth_flow_issue else "collect_login_trace_context",
+            "confidence": 0.78 if auth_flow_issue else 0.4,
         }
+        user_reply = (
+            "我们正在核对登录和签名链路，当前看起来更像鉴权流程异常。建议您先确认钱包网络、重新连接后再试一次。"
+            if auth_flow_issue
+            else "目前还需要更多登录时间、钱包地址或报错截图，才能准确判断问题原因。"
+        )
+        return internal, user_reply
+
+    def _order_summary(
+        self,
+        order: Dict[str, Any],
+        log_messages: List[str],
+        runbook: List[Dict[str, Any]],
+        code: List[Dict[str, Any]],
+    ) -> tuple[Dict[str, Any], str]:
+        order_pending = order.get("status") in {"pending", "unpaid"}
+        root_cause = "order_still_pending" if order_pending else "insufficient_evidence"
+        internal = {
+            "root_cause": root_cause,
+            "evidence": [
+                f"order.status={order.get('status', 'unknown')}",
+                f"log_count={len(log_messages)}",
+            ],
+            "related_files": code,
+            "runbook_sources": [item["source"] for item in runbook],
+            "suggested_action": "continue_order_state_followup" if order_pending else "collect_more_order_context",
+            "confidence": 0.75 if order_pending else 0.46,
+        }
+        user_reply = (
+            "我们查到当前订单仍处于处理中或待确认状态，建议稍后刷新后再次查看；如果长时间未更新，客服可以继续跟进。"
+            if order_pending
+            else "目前还需要更多订单号或链路信息，才能准确判断订单状态异常的原因。"
+        )
+        return internal, user_reply
+
+    def _generic_summary(
+        self,
+        order: Dict[str, Any],
+        payment: Dict[str, Any],
+        log_messages: List[str],
+        runbook: List[Dict[str, Any]],
+        code: List[Dict[str, Any]],
+    ) -> tuple[Dict[str, Any], str]:
+        internal = {
+            "root_cause": "insufficient_evidence",
+            "evidence": [
+                f"order.status={order.get('status', 'unknown')}",
+                f"payment.status={payment.get('status', 'unknown')}",
+                f"log_count={len(log_messages)}",
+            ],
+            "related_files": code,
+            "runbook_sources": [item["source"] for item in runbook],
+            "suggested_action": "collect_more_trace_context",
+            "confidence": 0.42,
+        }
+        user_reply = "目前还需要更多订单号、流水号、登录时间或报错截图，才能准确判断原因。"
+        return internal, user_reply
 
 
 class ResultSynthesizer:
@@ -123,4 +218,3 @@ class ResultSynthesizer:
             "type": "clarify",
             "message": "我还不能确定这是销售、市场还是客服 QA 任务，请补充业务目标。",
         }
-

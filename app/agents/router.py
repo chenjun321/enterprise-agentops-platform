@@ -1,5 +1,6 @@
 from typing import Dict
 
+from app.agents.scene_registry import match_customer_qa_intent
 from app.core.state import AgentName, AgentState
 
 
@@ -22,7 +23,7 @@ class RouterAgent:
             intent = "campaign_effect_analysis"
         elif any(word in message for word in ["客服", "支付", "订单", "报错", "登录", "失败", "原因", "工单"]):
             target = "customer_qa_agent"
-            intent = "issue_diagnosis"
+            intent = match_customer_qa_intent(message)
         elif context.get("customer_name") or context.get("company"):
             target = "sales_agent"
             intent = "generate_sales_pitch"
@@ -31,7 +32,7 @@ class RouterAgent:
             intent = "campaign_effect_analysis"
         elif context.get("order_no") or context.get("trace_id"):
             target = "customer_qa_agent"
-            intent = "issue_diagnosis"
+            intent = "order_issue_diagnosis"
         else:
             target = "unknown"
             intent = "clarify_intent"
@@ -40,4 +41,3 @@ class RouterAgent:
         state.intent = intent
         state.add_audit("routed", {"target_agent": target, "intent": intent})
         return {"target_agent": target, "intent": intent, "confidence": 0.86}
-

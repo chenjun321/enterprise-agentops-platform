@@ -1,0 +1,197 @@
+{
+  "default_intent": "issue_diagnosis",
+  "scenes": {
+    "payment_issue_diagnosis": {
+      "keywords": ["支付", "付款", "回调", "待支付", "流水"],
+      "required_context_modes": ["order_or_trace"],
+      "steps": [
+        {
+          "step_id": "order_state",
+          "type": "tool_call",
+          "name": "查询订单状态",
+          "tool": "OrderQueryTool",
+          "input": {
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
+        {
+          "step_id": "payment_state",
+          "type": "tool_call",
+          "name": "查询支付状态",
+          "tool": "PaymentQueryTool",
+          "input": {
+            "trace_id": {"from_context": "trace_id"}
+          },
+          "depends_on": ["order_state"]
+        },
+        {
+          "step_id": "logs",
+          "type": "tool_call",
+          "name": "查询支付与回调日志",
+          "tool": "LogSearchTool",
+          "input": {
+            "trace_id": {"from_context": "trace_id"},
+            "order_no": {"from_context": "order_no"},
+            "keyword": "callback"
+          },
+          "depends_on": ["order_state", "payment_state"]
+        },
+        {
+          "step_id": "runbook",
+          "type": "tool_call",
+          "name": "检索排障手册",
+          "tool": "KnowledgeSearchTool",
+          "input": {
+            "query": {"from_message": true},
+            "domain": "customer_qa",
+            "doc_types": ["faq", "runbook", "error_code"]
+          }
+        },
+        {
+          "step_id": "code",
+          "type": "tool_call",
+          "name": "定位支付回调代码",
+          "tool": "CodeSearchTool",
+          "input": {
+            "query": "payment callback timeout",
+            "trace_keywords": ["PAYMENT_CALLBACK_TIMEOUT"]
+          },
+          "required": false
+        },
+        {
+          "step_id": "qa_synthesis",
+          "type": "analysis",
+          "name": "生成根因和客服回复",
+          "agent": "customer_qa_agent"
+        }
+      ]
+    },
+    "login_issue_diagnosis": {
+      "keywords": ["登录", "登陆", "签名", "认证", "token", "wallet", "钱包"],
+      "required_context_modes": [],
+      "steps": [
+        {
+          "step_id": "logs",
+          "type": "tool_call",
+          "name": "查询登录与鉴权日志",
+          "tool": "LogSearchTool",
+          "input": {
+            "trace_id": {"from_context": "trace_id"},
+            "user_id": {"from_context": "user_id"},
+            "service": "auth",
+            "keyword": "login"
+          }
+        },
+        {
+          "step_id": "runbook",
+          "type": "tool_call",
+          "name": "检索排障手册",
+          "tool": "KnowledgeSearchTool",
+          "input": {
+            "query": {"from_message": true},
+            "domain": "customer_qa",
+            "doc_types": ["faq", "runbook", "error_code"]
+          }
+        },
+        {
+          "step_id": "code",
+          "type": "tool_call",
+          "name": "定位登录与鉴权代码",
+          "tool": "CodeSearchTool",
+          "input": {
+            "query": "login token auth signature",
+            "trace_keywords": ["AUTH", "LOGIN_FAILED"]
+          },
+          "required": false
+        },
+        {
+          "step_id": "qa_synthesis",
+          "type": "analysis",
+          "name": "生成根因和客服回复",
+          "agent": "customer_qa_agent"
+        }
+      ]
+    },
+    "order_issue_diagnosis": {
+      "keywords": ["订单", "工单", "状态", "查询", "查一下"],
+      "required_context_modes": ["order_or_trace"],
+      "steps": [
+        {
+          "step_id": "order_state",
+          "type": "tool_call",
+          "name": "查询订单状态",
+          "tool": "OrderQueryTool",
+          "input": {
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
+        {
+          "step_id": "logs",
+          "type": "tool_call",
+          "name": "查询订单相关日志",
+          "tool": "LogSearchTool",
+          "input": {
+            "trace_id": {"from_context": "trace_id"},
+            "order_no": {"from_context": "order_no"},
+            "keyword": "order"
+          },
+          "depends_on": ["order_state"]
+        },
+        {
+          "step_id": "runbook",
+          "type": "tool_call",
+          "name": "检索排障手册",
+          "tool": "KnowledgeSearchTool",
+          "input": {
+            "query": {"from_message": true},
+            "domain": "customer_qa",
+            "doc_types": ["faq", "runbook", "error_code"]
+          }
+        },
+        {
+          "step_id": "qa_synthesis",
+          "type": "analysis",
+          "name": "生成根因和客服回复",
+          "agent": "customer_qa_agent"
+        }
+      ]
+    },
+    "issue_diagnosis": {
+      "keywords": [],
+      "required_context_modes": [],
+      "steps": [
+        {
+          "step_id": "logs",
+          "type": "tool_call",
+          "name": "按关键词查询通用日志",
+          "tool": "LogSearchTool",
+          "input": {
+            "trace_id": {"from_context": "trace_id"},
+            "order_no": {"from_context": "order_no"},
+            "user_id": {"from_context": "user_id"},
+            "keyword": {"from_message": true}
+          }
+        },
+        {
+          "step_id": "runbook",
+          "type": "tool_call",
+          "name": "检索排障手册",
+          "tool": "KnowledgeSearchTool",
+          "input": {
+            "query": {"from_message": true},
+            "domain": "customer_qa",
+            "doc_types": ["faq", "runbook", "error_code"]
+          }
+        },
+        {
+          "step_id": "qa_synthesis",
+          "type": "analysis",
+          "name": "生成根因和客服回复",
+          "agent": "customer_qa_agent"
+        }
+      ]
+    }
+  }
+}

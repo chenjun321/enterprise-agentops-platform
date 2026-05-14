@@ -1,3 +1,6 @@
+from typing import Any, Dict
+
+from app.agents.scene_registry import get_customer_qa_scene, get_missing_fields_for_scene
 from app.core.state import AgentState, ExecutionPlan, PlanStep
 
 
@@ -102,61 +105,38 @@ class PlannerAgent:
         )
 
     def _qa_plan(self, state: AgentState) -> ExecutionPlan:
-        order_no = state.context.get("order_no", "")
-        trace_id = state.context.get("trace_id", "")
-        missing = []
-        if not order_no and not trace_id:
-            missing.append("order_no_or_trace_id")
+        scene = get_customer_qa_scene(state.intent)
+        missing = get_missing_fields_for_scene(scene, state.context)
         return ExecutionPlan(
-            plan_id="qa_issue_diagnosis_v1",
+            plan_id=f"{state.intent}_v1",
             target_agent="customer_qa_agent",
             intent=state.intent,
             needs_user_input=bool(missing),
             missing_fields=missing,
-            steps=[
-                PlanStep(
-                    step_id="order_state",
-                    type="tool_call",
-                    name="查询订单状态",
-                    tool="OrderQueryTool",
-                    input={"order_no": order_no, "trace_id": trace_id},
-                ),
-                PlanStep(
-                    step_id="payment_state",
-                    type="tool_call",
-                    name="查询支付状态",
-                    tool="PaymentQueryTool",
-                    input={"trace_id": trace_id},
-                    depends_on=["order_state"],
-                ),
-                PlanStep(
-                    step_id="logs",
-                    type="tool_call",
-                    name="查询业务日志",
-                    tool="LogSearchTool",
-                    input={"trace_id": trace_id, "order_no": order_no, "keyword": "callback"},
-                    depends_on=["order_state", "payment_state"],
-                ),
-                PlanStep(
-                    step_id="runbook",
-                    type="tool_call",
-                    name="检索排障手册",
-                    tool="KnowledgeSearchTool",
-                    input={
-                        "query": state.message,
-                        "domain": "customer_qa",
-                        "doc_types": ["faq", "runbook", "error_code"],
-                    },
-                ),
-                PlanStep(
-                    step_id="code",
-                    type="tool_call",
-                    name="定位相关代码",
-                    tool="CodeSearchTool",
-                    input={"query": "payment callback timeout", "trace_keywords": ["PAYMENT_CALLBACK_TIMEOUT"]},
-                    required=False,
-                ),
-                PlanStep(step_id="qa_synthesis", type="analysis", name="生成根因和客服回复", agent="customer_qa_agent"),
-            ],
+            steps=[self._build_scene_step(step, state) for step in scene["steps"]],
         )
 
+    def _build_scene_step(self, step: Dict[str, Any], state: AgentState) -> PlanStep:
+        return PlanStep(
+            step_id=step["step_id"],
+            type=step["type"],
+            name=step["name"],
+            tool=step.get("tool"),
+            agent=step.get("agent"),
+            input=self._resolve_scene_payload(step.get("input", {}), state),
+            depends_on=step.get("depends_on", []),
+            required=step.get("required", True),
+        )
+
+    def _resolve_scene_payload(self, payload: Dict[str, Any], state: AgentState) -> Dict[str, Any]:
+        resolved: Dict[str, Any] = {}
+        for key, value in payload.items():
+            if isinstance(value, dict):
+                if value.get("from_message"):
+                    resolved[key] = state.message
+                    continue
+                if "from_context" in value:
+                    resolved[key] = state.context.get(value["from_context"], "")
+                    continue
+            resolved[key] = value
+        return resolved

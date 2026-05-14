@@ -10,6 +10,9 @@ os.environ["DATABASE_URL"] = "sqlite:///./test_enterprise_agents.db"
 from fastapi.testclient import TestClient
 
 from app.agents.executor import PlanExecutor
+from app.agents.planner import PlannerAgent
+from app.agents.router import RouterAgent
+from app.agents.scene_registry import get_customer_qa_scene
 from app.core.state import AgentState, ExecutionPlan, PlanStep
 from app.core.config import get_settings
 from app.db.database import Base, SessionLocal, engine
@@ -66,6 +69,59 @@ def test_support_route():
     body = response.json()
     assert body["target_agent"] == "customer_qa_agent"
     assert "internal_summary" in body["answer"]
+
+
+def test_router_and_planner_choose_payment_tool_combo():
+    state = AgentState(
+        employee_id="support_001",
+        role="support",
+        message="用户支付成功但订单待支付，查一下原因",
+        context={"order_no": "O20260505001"},
+    )
+    RouterAgent().route(state)
+    plan = PlannerAgent().plan(state)
+
+    assert state.intent == "payment_issue_diagnosis"
+    tool_names = [step.tool for step in plan.steps if step.type == "tool_call"]
+    assert tool_names == [
+        "OrderQueryTool",
+        "PaymentQueryTool",
+        "LogSearchTool",
+        "KnowledgeSearchTool",
+        "CodeSearchTool",
+    ]
+
+
+def test_router_and_planner_choose_login_tool_combo():
+    state = AgentState(
+        employee_id="support_001",
+        role="support",
+        message="用户登录失败，帮我排查一下签名问题",
+        context={"user_id": "customer_003"},
+    )
+    RouterAgent().route(state)
+    plan = PlannerAgent().plan(state)
+
+    assert state.intent == "login_issue_diagnosis"
+    tool_names = [step.tool for step in plan.steps if step.type == "tool_call"]
+    assert tool_names == [
+        "LogSearchTool",
+        "KnowledgeSearchTool",
+        "CodeSearchTool",
+    ]
+
+
+def test_customer_qa_scene_registry_drives_steps():
+    scene = get_customer_qa_scene("payment_issue_diagnosis")
+
+    assert scene["required_context_modes"] == ["order_or_trace"]
+    assert [step["tool"] for step in scene["steps"] if step["type"] == "tool_call"] == [
+        "OrderQueryTool",
+        "PaymentQueryTool",
+        "LogSearchTool",
+        "KnowledgeSearchTool",
+        "CodeSearchTool",
+    ]
 
 
 def test_production_requires_internal_api_key():
