@@ -1,10 +1,118 @@
 {
+  "schema_version": "1.0",
   "default_intent": "issue_diagnosis",
   "scenes": {
+    "bug_report_submission": {
+      "keywords": ["bug", "BUG", "反馈", "提交", "崩溃", "闪退", "异常", "报错", "无法", "不能"],
+      "required_context_modes": [],
+      "steps": [
+        {
+          "step_id": "user_identity",
+          "type": "tool_call",
+          "name": "识别 C 端用户身份",
+          "tool": "CustomerIdentityResolveTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "user_id": {"from_context": "user_id"},
+            "wallet_address": {"from_context": "wallet_address"},
+            "twitter_handle": {"from_context": "twitter_handle"},
+            "username": {"from_context": "username"},
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
+        {
+          "step_id": "runbook",
+          "type": "tool_call",
+          "name": "检索公开问题处理口径",
+          "tool": "KnowledgeSearchTool",
+          "input": {
+            "query": {"from_message": true},
+            "domain": "customer_qa",
+            "doc_types": ["faq", "bug_policy"]
+          }
+        },
+        {
+          "step_id": "ticket",
+          "type": "tool_call",
+          "name": "创建用户反馈工单",
+          "tool": "SupportTicketCreateTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "contact": {"from_context": "contact"},
+            "channel": {"from_context": "channel"},
+            "category": "bug",
+            "bug_type": "customer_reported",
+            "severity": {"from_context": "severity"},
+            "question": {"from_message": true},
+            "reproduction_steps": {"from_context": "reproduction_steps"}
+          }
+        },
+        {
+          "step_id": "qa_synthesis",
+          "type": "analysis",
+          "name": "生成用户确认回复",
+          "agent": "customer_qa_agent"
+        }
+      ]
+    },
+    "customer_daily_question": {
+      "keywords": ["怎么", "如何", "为什么", "规则", "奖励", "任务", "活动", "钱包", "绑定", "账号", "积分", "多久"],
+      "required_context_modes": [],
+      "steps": [
+        {
+          "step_id": "user_identity",
+          "type": "tool_call",
+          "name": "识别 C 端用户身份",
+          "tool": "CustomerIdentityResolveTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "user_id": {"from_context": "user_id"},
+            "wallet_address": {"from_context": "wallet_address"},
+            "twitter_handle": {"from_context": "twitter_handle"},
+            "username": {"from_context": "username"},
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
+        {
+          "step_id": "runbook",
+          "type": "tool_call",
+          "name": "检索 C 端 FAQ",
+          "tool": "KnowledgeSearchTool",
+          "input": {
+            "query": {"from_message": true},
+            "domain": "customer_qa",
+            "doc_types": ["faq", "bug_policy"]
+          }
+        },
+        {
+          "step_id": "qa_synthesis",
+          "type": "analysis",
+          "name": "生成用户可见回复",
+          "agent": "customer_qa_agent"
+        }
+      ]
+    },
     "payment_issue_diagnosis": {
       "keywords": ["支付", "付款", "回调", "待支付", "流水"],
       "required_context_modes": ["order_or_trace"],
       "steps": [
+        {
+          "step_id": "user_identity",
+          "type": "tool_call",
+          "name": "识别 C 端用户身份",
+          "tool": "CustomerIdentityResolveTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "user_id": {"from_context": "user_id"},
+            "wallet_address": {"from_context": "wallet_address"},
+            "twitter_handle": {"from_context": "twitter_handle"},
+            "username": {"from_context": "username"},
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
         {
           "step_id": "order_state",
           "type": "tool_call",
@@ -72,6 +180,21 @@
       "required_context_modes": [],
       "steps": [
         {
+          "step_id": "user_identity",
+          "type": "tool_call",
+          "name": "识别 C 端用户身份",
+          "tool": "CustomerIdentityResolveTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "user_id": {"from_context": "user_id"},
+            "wallet_address": {"from_context": "wallet_address"},
+            "twitter_handle": {"from_context": "twitter_handle"},
+            "username": {"from_context": "username"},
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
+        {
           "step_id": "logs",
           "type": "tool_call",
           "name": "查询登录与鉴权日志",
@@ -118,6 +241,21 @@
       "required_context_modes": ["order_or_trace"],
       "steps": [
         {
+          "step_id": "user_identity",
+          "type": "tool_call",
+          "name": "识别 C 端用户身份",
+          "tool": "CustomerIdentityResolveTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "user_id": {"from_context": "user_id"},
+            "wallet_address": {"from_context": "wallet_address"},
+            "twitter_handle": {"from_context": "twitter_handle"},
+            "username": {"from_context": "username"},
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
+        {
           "step_id": "order_state",
           "type": "tool_call",
           "name": "查询订单状态",
@@ -162,6 +300,21 @@
       "keywords": [],
       "required_context_modes": [],
       "steps": [
+        {
+          "step_id": "user_identity",
+          "type": "tool_call",
+          "name": "识别 C 端用户身份",
+          "tool": "CustomerIdentityResolveTool",
+          "input": {
+            "customer_user_id": {"from_context": "customer_user_id"},
+            "user_id": {"from_context": "user_id"},
+            "wallet_address": {"from_context": "wallet_address"},
+            "twitter_handle": {"from_context": "twitter_handle"},
+            "username": {"from_context": "username"},
+            "order_no": {"from_context": "order_no"},
+            "trace_id": {"from_context": "trace_id"}
+          }
+        },
         {
           "step_id": "logs",
           "type": "tool_call",

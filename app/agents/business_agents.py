@@ -72,6 +72,10 @@ class CustomerQAAgent:
         order = orders[0] if orders else {}
         payment = payments[0] if payments else {}
         log_messages = [item.get("message", "") for item in logs]
+        if state.intent == "bug_report_submission":
+            return self._bug_report_response(state, runbook)
+        if state.intent == "customer_daily_question":
+            return self._daily_question_response(state.message, runbook)
         if state.intent == "payment_issue_diagnosis":
             internal, user_reply = self._payment_summary(order, payment, log_messages, runbook, code)
         elif state.intent == "login_issue_diagnosis":
@@ -86,6 +90,91 @@ class CustomerQAAgent:
             "internal_summary": redact_for_role(state.role, internal),
             "confidence": internal["confidence"],
         }
+
+    def _bug_report_response(self, state: AgentState, docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        ticket = state.step_results.get("ticket", {}).get("data", {}).get("ticket")
+        ticket_no = ticket.get("ticket_no") if ticket else ""
+        user_reply = (
+            f"我们已经收到你的反馈，工单号是 {ticket_no}。请保留问题出现的页面、时间、截图或录屏，"
+            "如果后续需要补充信息，客服会通过你留下的联系方式继续跟进。"
+            if ticket_no
+            else "我们已经收到你的反馈。请补充问题出现的页面、时间、截图或录屏，方便客服继续定位。"
+        )
+        return {
+            "user_reply": user_reply,
+            "next_action": "wait_for_support_followup" if ticket_no else "provide_more_context",
+            "ticket": ticket,
+            "knowledge_sources": [item["source"] for item in docs],
+            "confidence": 0.88 if ticket_no else 0.55,
+        }
+
+    def _daily_question_response(self, message: str, docs: List[Dict[str, Any]]) -> Dict[str, Any]:
+        steps = self._operation_steps(message)
+        if not steps and docs:
+            steps = self._steps_from_docs(docs[0].get("content", ""))
+        if steps:
+            user_reply = "你可以按下面步骤操作：\n" + "\n".join(
+                f"{index}. {step['title']}：{step['detail']}" for index, step in enumerate(steps, start=1)
+            )
+            return {
+                "answer_type": "operation_guide",
+                "user_reply": user_reply,
+                "steps": steps,
+                "next_action": "follow_numbered_steps",
+                "knowledge_sources": [item["source"] for item in docs],
+                "confidence": 0.78 if docs else 0.62,
+            }
+        return {
+            "answer_type": "clarification",
+            "user_reply": "这个问题我还需要更多信息才能准确回答。请补充账号、页面、活动名称或截图中的提示文案。",
+            "steps": [],
+            "next_action": "ask_for_more_context",
+            "knowledge_sources": [],
+            "confidence": 0.38,
+        }
+
+    def _operation_steps(self, message: str) -> List[Dict[str, str]]:
+        lowered = message.lower()
+        if any(keyword in lowered for keyword in ["钱包", "wallet", "绑定"]):
+            return [
+                {"title": "进入账号设置", "detail": "打开个人中心，进入账号或钱包管理页面。"},
+                {"title": "选择绑定钱包", "detail": "点击绑定钱包，确认钱包插件已解锁并选择正确的钱包地址。"},
+                {"title": "完成签名确认", "detail": "在钱包弹窗中确认签名，签名成功后回到页面查看绑定状态。"},
+                {"title": "失败时补充信息", "detail": "如果仍失败，请提供钱包地址、浏览器、发生时间和截图。"},
+            ]
+        if any(keyword in lowered for keyword in ["登录", "登陆", "sign", "token"]):
+            return [
+                {"title": "刷新并重新进入", "detail": "刷新页面后重新打开登录入口。"},
+                {"title": "确认账号或钱包状态", "detail": "确认钱包插件已解锁、网络正确，或账号登录态没有过期。"},
+                {"title": "重新授权", "detail": "重新发起登录或签名授权，不要关闭授权弹窗。"},
+                {"title": "提交排查信息", "detail": "仍失败时，请提供发生时间、钱包地址、浏览器和错误截图。"},
+            ]
+        if any(keyword in lowered for keyword in ["奖励", "积分", "到账", "任务", "活动"]):
+            return [
+                {"title": "确认活动和任务", "detail": "先确认活动名称、任务名称和当前登录账号是否正确。"},
+                {"title": "检查提交状态", "detail": "进入活动详情页，查看任务是否显示已提交、审核中或已完成。"},
+                {"title": "等待系统处理", "detail": "奖励或积分可能存在处理延迟，可稍后刷新页面查看。"},
+                {"title": "联系支持", "detail": "长时间未到账时，请提供活动名称、任务名称、账号 ID、提交时间和截图。"},
+            ]
+        if any(keyword in lowered for keyword in ["支付", "订单", "付款"]):
+            return [
+                {"title": "确认订单信息", "detail": "准备订单号、支付时间和交易流水截图。"},
+                {"title": "刷新订单状态", "detail": "返回订单页面刷新，确认是否仍显示待支付或处理中。"},
+                {"title": "等待状态同步", "detail": "支付成功后状态同步可能有短暂延迟，系统会继续核对。"},
+                {"title": "提交人工核对", "detail": "如果长时间未更新，请把订单号和支付流水发给客服继续处理。"},
+            ]
+        return []
+
+    def _steps_from_docs(self, content: str) -> List[Dict[str, str]]:
+        lines = [
+            line.strip("- ").strip()
+            for line in content.splitlines()
+            if line.strip() and not line.startswith("#") and not line.startswith("---")
+        ]
+        return [
+            {"title": f"步骤 {index}", "detail": line[:160]}
+            for index, line in enumerate(lines[:4], start=1)
+        ]
 
     def _payment_summary(
         self,

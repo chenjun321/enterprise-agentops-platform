@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.db.models import KnowledgeDocument
 
 
@@ -41,33 +42,53 @@ class SimpleKnowledgeIndexer:
 
     def index_directory(self, docs_dir: str) -> int:
         count = 0
+        indexed_docs = []
         for path in Path(docs_dir).glob("*.md"):
             text = path.read_text(encoding="utf-8")
             metadata = self._parse_frontmatter(text)
             content = self._strip_frontmatter(text)
+            doc = {
+                "title": metadata.get("title", path.stem),
+                "domain": metadata.get("domain", "general"),
+                "doc_type": metadata.get("doc_type", "document"),
+                "source": str(path),
+                "content": content,
+            }
             existing = self.db.execute(
                 select(KnowledgeDocument).where(KnowledgeDocument.source_path == str(path))
             ).scalar_one_or_none()
             if existing:
-                existing.content = content
-                existing.title = metadata.get("title", path.stem)
-                existing.domain = metadata.get("domain", "general")
-                existing.doc_type = metadata.get("doc_type", "document")
+                existing.content = doc["content"]
+                existing.title = doc["title"]
+                existing.domain = doc["domain"]
+                existing.doc_type = doc["doc_type"]
             else:
                 self.db.add(
                     KnowledgeDocument(
-                        title=metadata.get("title", path.stem),
-                        domain=metadata.get("domain", "general"),
-                        doc_type=metadata.get("doc_type", "document"),
+                        title=doc["title"],
+                        domain=doc["domain"],
+                        doc_type=doc["doc_type"],
                         permission_level=metadata.get("permission_level", "employee"),
-                        source_path=str(path),
+                        source_path=doc["source"],
                         version=metadata.get("version", "v1"),
-                        content=content,
+                        content=doc["content"],
                     )
                 )
+            indexed_docs.append(doc)
             count += 1
         self.db.commit()
+        self._sync_vector_store(indexed_docs)
         return count
+
+    def _sync_vector_store(self, docs: List[Dict[str, str]]) -> None:
+        if get_settings().vector_store not in {"milvus", "milvus_lite"}:
+            return
+        try:
+            from app.rag.milvus_lite_adapter import MilvusLiteKnowledgeStore
+
+            MilvusLiteKnowledgeStore().upsert_documents(docs)
+        except Exception:
+            return
 
     def _parse_frontmatter(self, text: str) -> Dict[str, str]:
         if not text.startswith("---"):
@@ -107,6 +128,15 @@ class SimpleKnowledgeRetriever:
         if doc_types:
             stmt = stmt.where(KnowledgeDocument.doc_type.in_(list(doc_types)))
         docs = self.db.execute(stmt).scalars().all()
+        if get_settings().vector_store in {"milvus", "milvus_lite"}:
+            try:
+                from app.rag.milvus_lite_adapter import MilvusLiteKnowledgeStore
+
+                vector_results = MilvusLiteKnowledgeStore().search(query, domain, doc_types, top_k)
+                if vector_results:
+                    return vector_results
+            except Exception:
+                pass
         scored = []
         for doc in docs:
             score = score_text(query, f"{doc.title}\n{doc.content}")

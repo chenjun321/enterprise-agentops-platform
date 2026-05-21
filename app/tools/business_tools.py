@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, List
 
 from sqlalchemy import func, select
@@ -11,6 +12,7 @@ from app.db.models import (
     Payment,
     ProductLog,
     SalesNote,
+    SupportTicket,
 )
 from app.tools.base import BaseTool, ToolResult
 
@@ -232,3 +234,105 @@ class LogSearchTool(BaseTool):
                 ]
             },
         )
+
+
+class CustomerIdentityResolveTool(BaseTool):
+    name = "CustomerIdentityResolveTool"
+    description = "Resolve C-end user identity by user id, wallet, social handle, username, order, or trace id."
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def run(self, payload: Dict[str, Any]) -> ToolResult:
+        identifiers = {
+            "customer_user_id": payload.get("customer_user_id") or payload.get("user_id") or "",
+            "wallet_address": payload.get("wallet_address") or "",
+            "twitter_handle": payload.get("twitter_handle") or "",
+            "username": payload.get("username") or "",
+            "order_no": payload.get("order_no") or "",
+            "trace_id": payload.get("trace_id") or "",
+        }
+        confidence = 0.0
+        resolved_user_id = identifiers["customer_user_id"]
+        source = "none"
+        if resolved_user_id:
+            confidence = 0.95
+            source = "customer_user_id"
+        elif identifiers["order_no"] or identifiers["trace_id"]:
+            stmt = select(Order)
+            if identifiers["order_no"]:
+                stmt = stmt.where(Order.order_no == identifiers["order_no"])
+                source = "order_no"
+            else:
+                stmt = stmt.where(Order.trace_id == identifiers["trace_id"])
+                source = "trace_id"
+            order = self.db.execute(stmt.limit(1)).scalar_one_or_none()
+            if order:
+                resolved_user_id = f"customer_{order.customer_id:03d}"
+                confidence = 0.8
+        elif identifiers["wallet_address"]:
+            resolved_user_id = f"wallet:{identifiers['wallet_address']}"
+            confidence = 0.72
+            source = "wallet_address"
+        elif identifiers["twitter_handle"]:
+            resolved_user_id = f"twitter:{identifiers['twitter_handle'].lstrip('@')}"
+            confidence = 0.68
+            source = "twitter_handle"
+        elif identifiers["username"]:
+            resolved_user_id = f"username:{identifiers['username']}"
+            confidence = 0.64
+            source = "username"
+
+        return ToolResult(
+            ok=True,
+            data={
+                "identity": {
+                    "resolved_user_id": resolved_user_id,
+                    "source": source,
+                    "confidence": confidence,
+                    "identifiers": {key: value for key, value in identifiers.items() if value},
+                    "needs_more_identity": not bool(resolved_user_id),
+                }
+            },
+        )
+
+
+class SupportTicketCreateTool(BaseTool):
+    name = "SupportTicketCreateTool"
+    description = "Create a customer-facing support ticket for bug reports or unresolved QA issues."
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def run(self, payload: Dict[str, Any]) -> ToolResult:
+        customer_id = payload.get("customer_id")
+        ticket = SupportTicket(
+            ticket_no=self._ticket_no(),
+            customer_id=int(customer_id) if customer_id else None,
+            customer_user_id=str(payload.get("customer_user_id") or ""),
+            contact=str(payload.get("contact") or ""),
+            channel=str(payload.get("channel") or "web"),
+            category=str(payload.get("category") or "bug"),
+            question=str(payload.get("question") or payload.get("message") or ""),
+            severity=str(payload.get("severity") or "normal"),
+            bug_type=str(payload.get("bug_type") or "unknown"),
+            reproduction_steps=str(payload.get("reproduction_steps") or ""),
+            user_reply=str(payload.get("user_reply") or ""),
+            status="open",
+        )
+        self.db.add(ticket)
+        self.db.flush()
+        return ToolResult(
+            ok=True,
+            data={
+                "ticket": {
+                    "ticket_no": ticket.ticket_no,
+                    "status": ticket.status,
+                    "category": ticket.category,
+                    "severity": ticket.severity,
+                }
+            },
+        )
+
+    def _ticket_no(self) -> str:
+        return f"T{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}"

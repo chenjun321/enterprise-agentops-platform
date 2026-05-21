@@ -5,13 +5,17 @@ ROLE_TOOL_POLICY = {
     "sales": {"CRMTool", "KnowledgeSearchTool", "ExternalProfileTool"},
     "marketing": {"MarketingDataTool", "KnowledgeSearchTool"},
     "support": {
+        "CustomerIdentityResolveTool",
         "OrderQueryTool",
         "PaymentQueryTool",
         "LogSearchTool",
         "KnowledgeSearchTool",
         "CodeSearchTool",
+        "SupportTicketCreateTool",
     },
+    "customer": {"CustomerIdentityResolveTool", "KnowledgeSearchTool", "SupportTicketCreateTool"},
     "engineer": {
+        "CustomerIdentityResolveTool",
         "OrderQueryTool",
         "PaymentQueryTool",
         "LogSearchTool",
@@ -53,4 +57,3 @@ def validate_plan_steps(role: str, steps: List[Dict[str, Any]]) -> List[str]:
         if tool and not can_use_tool(role, tool):
             errors.append(f"role={role} cannot use tool={tool}")
     return errors
-

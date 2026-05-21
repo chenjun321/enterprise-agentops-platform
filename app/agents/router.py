@@ -15,7 +15,15 @@ class RouterAgent:
         message = state.message.lower()
         context = state.context
 
-        if any(word in message for word in ["销售", "话术", "客户画像", "跟进", "成交"]):
+        if context.get("_resume_intent"):
+            target: AgentName = context.get("_resume_target_agent", "customer_qa_agent")
+            intent = context["_resume_intent"]
+        elif state.role == "customer" or context.get("public_entrypoint"):
+            target: AgentName = "customer_qa_agent"
+            intent = match_customer_qa_intent(message)
+            if intent not in {"bug_report_submission", "customer_daily_question"}:
+                intent = "customer_daily_question"
+        elif any(word in message for word in ["销售", "话术", "客户画像", "跟进", "成交"]):
             target: AgentName = "sales_agent"
             intent = "generate_sales_pitch"
         elif any(word in message for word in ["活动", "市场", "新增", "留存", "转化", "gmv", "roi", "品牌"]):

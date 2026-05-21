@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -92,9 +93,16 @@ class SupportTicket(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     ticket_no: Mapped[str] = mapped_column(String(80), unique=True, index=True)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"))
+    customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    customer_user_id: Mapped[str] = mapped_column(String(80), index=True, default="")
+    contact: Mapped[str] = mapped_column(String(160), default="")
+    channel: Mapped[str] = mapped_column(String(40), default="web")
     category: Mapped[str] = mapped_column(String(80), index=True)
     question: Mapped[str] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(String(40), default="normal", index=True)
+    bug_type: Mapped[str] = mapped_column(String(80), default="")
+    reproduction_steps: Mapped[str] = mapped_column(Text, default="")
+    user_reply: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(40), default="open")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -152,6 +160,94 @@ class AuditEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class AgentReflection(Base):
+    __tablename__ = "agent_reflections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(120), index=True)
+    employee_id: Mapped[str] = mapped_column(String(160), index=True)
+    target_agent: Mapped[str] = mapped_column(String(80), index=True)
+    intent: Mapped[str] = mapped_column(String(120), index=True)
+    passed: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    risk_level: Mapped[str] = mapped_column(String(40), default="low", index=True)
+    rewrite_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    checks: Mapped[str] = mapped_column(Text, default="[]")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(160), index=True)
+    actor_type: Mapped[str] = mapped_column(String(40), index=True)
+    route: Mapped[str] = mapped_column(String(120), index=True)
+    ip_address: Mapped[str] = mapped_column(String(80), index=True, default="")
+    message_hash: Mapped[str] = mapped_column(String(80), index=True)
+    estimated_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(40), index=True, default="accepted")
+    reason: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ConversationThread(Base):
+    __tablename__ = "conversation_threads"
+
+    thread_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(String(160), index=True)
+    actor_type: Mapped[str] = mapped_column(String(40), index=True)
+    channel: Mapped[str] = mapped_column(String(40), index=True, default="internal")
+    status: Mapped[str] = mapped_column(String(40), index=True, default="active")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ThreadMessage(Base):
+    __tablename__ = "thread_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("conversation_threads.thread_id"), index=True)
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    payload: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class ThreadLock(Base):
+    __tablename__ = "thread_locks"
+
+    thread_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(String(120), index=True)
+    acquired_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class ThreadState(Base):
+    __tablename__ = "thread_states"
+
+    thread_id: Mapped[str] = mapped_column(ForeignKey("conversation_threads.thread_id"), primary_key=True)
+    state_json: Mapped[str] = mapped_column(Text, default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class PendingHumanInput(Base):
+    __tablename__ = "pending_human_inputs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("conversation_threads.thread_id"), index=True)
+    intent: Mapped[str] = mapped_column(String(120), index=True)
+    target_agent: Mapped[str] = mapped_column(String(80), index=True)
+    missing_fields: Mapped[str] = mapped_column(Text)
+    question: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(40), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
 
@@ -164,4 +260,3 @@ class KnowledgeDocument(Base):
     version: Mapped[str] = mapped_column(String(40), default="v1")
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-

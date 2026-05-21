@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Enterprise AgentOps Platform</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Enterprise AgentOps</p>
+        <h1>营销、销售、QA 智能服务控制台</h1>
+      </div>
+      <div class="status" id="serviceStatus">检查服务中</div>
+    </header>
+
+    <main class="shell">
+      <section class="settings-panel" aria-label="API 设置">
+        <div>
+          <h2>连接设置</h2>
+          <p>本地模式可留空；生产环境填入对应 token。</p>
+        </div>
+        <label>
+          Internal API Key
+          <input id="apiKey" type="password" autocomplete="off" placeholder="X-API-Key" />
+        </label>
+        <label>
+          Bearer Token
+          <input id="bearerToken" type="password" autocomplete="off" placeholder="support-token / sales-token" />
+        </label>
+        <label>
+          Public Channel Token
+          <input id="channelToken" type="password" autocomplete="off" placeholder="X-Channel-Token" />
+        </label>
+        <button class="secondary" id="saveSettings" type="button">保存设置</button>
+      </section>
+
+      <section class="workspace">
+        <nav class="tabs" aria-label="业务模块">
+          <button class="tab active" data-tab="marketing" type="button">营销</button>
+          <button class="tab" data-tab="sales" type="button">销售</button>
+          <button class="tab" data-tab="support" type="button">内部 QA</button>
+          <button class="tab" data-tab="customer" type="button">C 端 QA</button>
+        </nav>
+
+        <section class="module active" id="marketing">
+          <div class="module-copy">
+            <h2>营销分析</h2>
+            <p>分析活动新增、转化、留存和 GMV，输出可执行建议。</p>
+          </div>
+          <form class="agent-form" data-kind="internal">
+            <input type="hidden" name="role" value="marketing" />
+            <input type="hidden" name="employee_id" value="marketing_001" />
+            <label>
+              需求
+              <textarea name="message">分析一下 2026 春季拉新活动的新增用户质量和留存</textarea>
+            </label>
+            <label>
+              上下文 JSON
+              <textarea name="context">{"campaign_name":"2026 春季拉新活动"}</textarea>
+            </label>
+            <button type="submit">运行营销 Agent</button>
+          </form>
+        </section>
+
+        <section class="module" id="sales">
+          <div class="module-copy">
+            <h2>销售助手</h2>
+            <p>结合 CRM、销售手册和公开画像生成客户策略与话术。</p>
+          </div>
+          <form class="agent-form" data-kind="internal">
+            <input type="hidden" name="role" value="sales" />
+            <input type="hidden" name="employee_id" value="sales_001" />
+            <label>
+              需求
+              <textarea name="message">帮我根据客户信息生成教育行业销售话术</textarea>
+            </label>
+            <label>
+              上下文 JSON
+              <textarea name="context">{"customer_name":"张明","company":"Acme Education"}</textarea>
+            </label>
+            <button type="submit">运行销售 Agent</button>
+          </form>
+        </section>
+
+        <section class="module" id="support">
+          <div class="module-copy">
+            <h2>内部 QA 排障</h2>
+            <p>给客服和工程使用，可查订单、支付、日志、手册和代码线索。</p>
+          </div>
+          <form class="agent-form" data-kind="internal">
+            <input type="hidden" name="role" value="support" />
+            <input type="hidden" name="employee_id" value="support_001" />
+            <label>
+              需求
+              <textarea name="message">用户支付成功但订单待支付，查一下原因</textarea>
+            </label>
+            <label>
+              上下文 JSON
+              <textarea name="context">{"order_no":"O20260505001"}</textarea>
+            </label>
+            <button type="submit">运行内部 QA</button>
+          </form>
+        </section>
+
+        <section class="module" id="customer">
+          <div class="module-copy">
+            <h2>C 端 QA</h2>
+            <p>面向用户回答日常问题，遇到 Bug 自动提交反馈工单。</p>
+          </div>
+          <form class="agent-form" data-kind="customer">
+            <div class="grid-2">
+              <label>
+                用户 ID
+                <input name="customer_user_id" value="customer_002" />
+              </label>
+              <label>
+                联系方式
+                <input name="contact" value="user@example.com" />
+              </label>
+            </div>
+            <label>
+              用户问题
+              <textarea name="message">页面一直报错，无法提交任务，帮我反馈一个 bug</textarea>
+            </label>
+            <label>
+              上下文 JSON
+              <textarea name="context">{"severity":"high","reproduction_steps":"进入任务页后点击提交"}</textarea>
+            </label>
+            <button type="submit">提交 C 端 QA</button>
+          </form>
+        </section>
+      </section>
+
+      <section class="result-panel" aria-live="polite">
+        <div class="result-header">
+          <div>
+            <h2>执行结果</h2>
+            <p id="resultMeta">等待请求</p>
+          </div>
+          <button class="secondary" id="clearResult" type="button">清空</button>
+        </div>
+        <pre id="resultBox">{}</pre>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

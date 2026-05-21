@@ -29,6 +29,22 @@ def require_internal_api_key(request: Request) -> None:
     )
 
 
+def require_public_channel_token(request: Request) -> None:
+    settings = get_settings()
+    if not settings.public_channel_token:
+        return
+
+    provided = request.headers.get(settings.public_channel_header_name)
+    if provided == settings.public_channel_token:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="invalid_channel_token",
+        headers={"WWW-Authenticate": settings.public_channel_header_name},
+    )
+
+
 def get_optional_auth_context(request: Request) -> Optional[AuthContext]:
     settings = get_settings()
     if not settings.auth_tokens:

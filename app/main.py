@@ -1,16 +1,22 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import router
+from app.api.routes import internal_router, public_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.db.database import Base, SessionLocal, engine
 from app.db.database import check_database
+from app.db.seed import seed_demo_data
 from app.security.auth import require_internal_api_key
 
 
@@ -19,7 +25,23 @@ logger = logging.getLogger("app.request")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+    if settings.auto_init_local_db and not settings.is_production and settings.database_url.startswith("sqlite"):
+        _ensure_sqlite_parent(settings.database_url)
+        Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+        try:
+            seed_demo_data(db)
+        finally:
+            db.close()
     yield
+
+
+def _ensure_sqlite_parent(database_url: str) -> None:
+    raw_path = database_url.replace("sqlite:///", "", 1)
+    path = Path(urlparse(raw_path).path or raw_path)
+    if path.parent != Path("."):
+        path.parent.mkdir(parents=True, exist_ok=True)
 
 
 def create_app() -> FastAPI:
@@ -29,17 +51,31 @@ def create_app() -> FastAPI:
         raise RuntimeError("INTERNAL_API_KEY must be configured when APP_ENV=production")
     if settings.is_production and not settings.auth_tokens:
         raise RuntimeError("AUTH_TOKENS_JSON must configure at least one bearer token when APP_ENV=production")
+    if settings.is_production and not settings.public_channel_token:
+        raise RuntimeError("PUBLIC_CHANNEL_TOKEN must be configured when APP_ENV=production")
+    if settings.is_production and settings.database_url.startswith("sqlite"):
+        raise RuntimeError("DATABASE_URL must use PostgreSQL/MySQL when APP_ENV=production")
+    if settings.is_production and settings.vector_store != "milvus":
+        raise RuntimeError("VECTOR_STORE must be milvus when APP_ENV=production")
 
     app = FastAPI(
         title="enterprise-agentops-platform",
-        description="Multi-agent platform for sales, marketing, customer QA, RAG, code search, memory, audit, and tool execution.",
+        description="Production-oriented multi-agent service for marketing, sales, and customer QA.",
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.docs_enabled else None,
         redoc_url="/redoc" if settings.docs_enabled else None,
         openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
-    app.include_router(router, prefix="/api")
+    app.include_router(internal_router, prefix="/api")
+    app.include_router(public_router, prefix="/api")
+    static_dir = Path(__file__).resolve().parent / "web" / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+        @app.get("/")
+        def web_app():
+            return FileResponse(static_dir / "index.html")
 
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next):

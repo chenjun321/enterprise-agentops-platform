@@ -3,7 +3,7 @@ set -euo pipefail
 
 OWNER="${OWNER:-chenjun321}"
 REPO="${REPO:-enterprise-agentops-platform}"
-VISIBILITY="${VISIBILITY:-public}"
+VISIBILITY="${VISIBILITY:-private}"
 BRANCH="${BRANCH:-main}"
 COMMIT_MESSAGE="${COMMIT_MESSAGE:-Initialize enterprise-agentops-platform}"
 

@@ -1,0 +1,27 @@
+{
+  "name": "customer_qa_workflow_registry",
+  "version": "1.0",
+  "required_top_level_fields": ["schema_version", "default_intent", "scenes"],
+  "required_scene_fields": ["keywords", "required_context_modes", "steps"],
+  "required_step_fields": ["step_id", "type", "name"],
+  "allowed_step_types": ["tool_call", "analysis", "safety_check", "human_approval"],
+  "required_tool_step_fields": ["tool", "input"],
+  "input_reference_formats": {
+    "from_message": true,
+    "from_context": "field_name"
+  },
+  "taskon_qa_contract": {
+    "identity_first": true,
+    "supported_identity_keys": [
+      "customer_user_id",
+      "user_id",
+      "wallet_address",
+      "twitter_handle",
+      "username",
+      "order_no",
+      "trace_id"
+    ],
+    "public_response_shape": ["answer_type", "user_reply", "steps", "next_action", "confidence"],
+    "bug_response_shape": ["user_reply", "ticket", "next_action", "confidence"]
+  }
+}

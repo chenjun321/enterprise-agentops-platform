@@ -67,6 +67,12 @@ class PlanExecutor:
         resolved = dict(payload)
         order_result = state.step_results.get("order_state", {}).get("data", {})
         orders = order_result.get("orders") or []
+        identity = state.step_results.get("user_identity", {}).get("data", {}).get("identity", {})
+        if identity:
+            if not resolved.get("customer_user_id"):
+                resolved["customer_user_id"] = identity.get("resolved_user_id", "")
+            if not resolved.get("user_id"):
+                resolved["user_id"] = identity.get("resolved_user_id", "")
         if orders:
             first = orders[0]
             if not resolved.get("order_id"):
